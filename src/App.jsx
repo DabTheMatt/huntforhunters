@@ -2,9 +2,11 @@
 import { drawCloudLayer as drawCloudLayerExternal } from "./renderers/cloudRenderer";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import CompassPanel from "./Components/CompassPanel";
+import DraggablePanel from "./Components/DraggablePanel";
 
 import WeatherPanel from "./Components/WeatherPanel";
 import MapLayersPanel from "./Components/MapLayersPanel";
+import DevelopmentPanel from "./Components/DevelopmentPanel";
 
 
 /**
@@ -1448,7 +1450,7 @@ function InstrumentPanel({ ship, controls, setControls, environment, setEnvironm
         </div>
       </DraggablePanel>
 
-      <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", right: "240px", top: "240px", zIndex: 3, width: "240px" }}>
+      <DraggablePanel snapEnabled={uiSnapEnabled} width="240px" style={{ position: "fixed", right: "240px", top: "240px", zIndex: 3 }}>
         <CompassPanel
           ship={ship}
           environment={environment}
@@ -1598,123 +1600,7 @@ function SimulationLog({ logs }) {
   );
 }
 
-function DevelopmentPanel({ onFullAhead, onHardStarboard, onCrashStop, onReset }) {
-  return (
-    <div style={{ ...panelStyle, height: "168px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-      <div>
-        <div style={labelStyle}>Development</div>
-        <div style={{ marginTop: "4px", color: "#d6d3d1", fontSize: "14px" }}>
-          Current test: UI fit · course keeping · ASDIC contact · ship silhouette.
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-        <button style={buttonStyle} onClick={onFullAhead}>Full Ahead</button>
-        <button style={buttonStyle} onClick={onHardStarboard}>Hard Starboard</button>
-        <button style={buttonStyle} onClick={onCrashStop}>Crash Stop</button>
-        <button style={dangerButtonStyle} onClick={onReset}>Reset Trial</button>
-      </div>
-    </div>
-  );
-}
 
-function DraggablePanel({ style, children, snapEnabled = true }) {
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragRef = useRef({ active: false, x: 0, y: 0 });
-  const panelRef = useRef(null);
-
-  const isInteractiveTarget = (target) => {
-    return Boolean(target.closest?.("button, input, select, textarea, option"));
-  };
-
-  const snapToUiGrid = (value) => Math.round(value / UI_SNAP_GRID_PX) * UI_SNAP_GRID_PX;
-
-  const snapPanelToTopAndRightGrid = () => {
-    const element = panelRef.current;
-    if (!element) return;
-    const rect = element.getBoundingClientRect();
-
-    // Snap the actual outer panel edges so windows sit exactly between grid lines.
-    const dx = snapToUiGrid(rect.right) - rect.right;
-    const dy = snapToUiGrid(rect.top) - rect.top;
-    setOffset((current) => ({
-      x: current.x + dx,
-      y: current.y + dy,
-    }));
-  };
-
-  useEffect(() => {
-    if (!snapEnabled) return;
-    const id = window.requestAnimationFrame(() => snapPanelToTopAndRightGrid());
-    return () => window.cancelAnimationFrame(id);
-  }, [snapEnabled]);
-
-  useEffect(() => {
-    const handleMouseMove = (event) => {
-      if (!dragRef.current.active) return;
-      const dx = event.clientX - dragRef.current.x;
-      const dy = event.clientY - dragRef.current.y;
-      dragRef.current = { active: true, x: event.clientX, y: event.clientY };
-      setOffset((current) => ({ x: current.x + dx, y: current.y + dy }));
-    };
-
-    const handleMouseUp = () => {
-      if (dragRef.current.active && snapEnabled) {
-        snapPanelToTopAndRightGrid();
-      }
-      dragRef.current.active = false;
-      setIsDragging(false);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [snapEnabled]);
-
-  return (
-    <>
-      {isDragging && snapEnabled && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 2,
-            pointerEvents: "none",
-            backgroundColor: "rgba(0,0,0,0.04)",
-            backgroundImage: `linear-gradient(rgba(253,230,138,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(253,230,138,0.18) 1px, transparent 1px)`,
-            backgroundSize: `${UI_SNAP_GRID_PX}px ${UI_SNAP_GRID_PX}px`,
-          }}
-        />
-      )}
-      <div
-        ref={panelRef}
-        onMouseDown={(event) => {
-          if (event.button !== 0 || isInteractiveTarget(event.target)) return;
-          dragRef.current = { active: true, x: event.clientX, y: event.clientY };
-          setIsDragging(true);
-          event.preventDefault();
-        }}
-        style={{
-          ...style,
-          minHeight: style?.height
-            ? `${Math.ceil(parseFloat(style.height) / PANEL_HEIGHT_GRID_PX) * PANEL_HEIGHT_GRID_PX}px`
-            : style?.minHeight,
-          transform: `translate(${offset.x}px, ${offset.y}px)`,
-          cursor: isDragging ? "grabbing" : "grab",
-          userSelect: isDragging ? "none" : "auto",
-          outline: isDragging && snapEnabled ? "1px dashed rgba(253,230,138,0.85)" : "none",
-          outlineOffset: "0px",
-        }}
-        title={snapEnabled ? "Drag panel — visible top/right edges snap to 24px grid" : "Drag panel"}
-      >
-        {children}
-      </div>
-    </>
-  );
-}
 
 export default function App() {
   const initialShipState = {

@@ -37,7 +37,7 @@ export default function CompassPanel({
   const stopwatchMinuteAngle = ((stopwatchSeconds / 60) % 60) * 6;
 
   return (
-    <div style={{ ...panelStyle, width: "260px", height: "576px", overflow: "visible" }}>
+    <div style={{ ...panelStyle, width: "240px", height: "576px", overflow: "visible" }}>
       <div style={labelStyle}>Compass</div>
 
       <div style={{ position: "relative", width: `${compassSize}px`, height: `${compassSize}px`, margin: "8px auto 0" }}>
