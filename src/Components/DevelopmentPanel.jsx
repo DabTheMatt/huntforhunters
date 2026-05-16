@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 export default function DevelopmentPanel({
   panelStyle,
   labelStyle,
+  collapsed = false,
 }) {
   const [stats, setStats] = useState({
     heapUsedMb: null,
@@ -143,6 +144,40 @@ export default function DevelopmentPanel({
     : stats.fps !== null && stats.fps < 25
       ? "LOW FPS"
       : "OK";
+
+  if (collapsed) {
+    return (
+      <div
+        style={{
+          ...(panelStyle ?? {}),
+          background: panelStyle?.background ?? "rgba(28,25,23,0.92)",
+          border: panelStyle?.border ?? "1px solid rgba(253,230,138,0.16)",
+          borderRadius: panelStyle?.borderRadius ?? "18px",
+          boxShadow: panelStyle?.boxShadow ?? "0 10px 30px rgba(0,0,0,0.32)",
+          width: "100%",
+          minHeight: "44px",
+          height: "44px",
+          boxSizing: "border-box",
+          overflow: "hidden",
+          padding: "14px 36px 10px 18px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            ...(labelStyle ?? {}),
+            fontSize: labelStyle?.fontSize ?? "10px",
+            textAlign: "center",
+            letterSpacing: labelStyle?.letterSpacing,
+          }}
+        >
+          DEVELOPMENT
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

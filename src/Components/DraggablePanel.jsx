@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { cloneElement, isValidElement, useEffect, useRef, useState } from "react";
 
 const UI_SNAP_GRID_PX = 24;
 
 export default function DraggablePanel({ children, style = {}, snapEnabled = true, width }) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const dragStartRef = useRef(null);
   const panelRef = useRef(null);
 
@@ -58,6 +59,10 @@ export default function DraggablePanel({ children, style = {}, snapEnabled = tru
     };
   }, [dragging, snapEnabled]);
 
+  const panelContent = isValidElement(children)
+    ? cloneElement(children, { collapsed })
+    : children;
+
   return (
     <>
       {dragging && snapEnabled && (
@@ -89,9 +94,34 @@ export default function DraggablePanel({ children, style = {}, snapEnabled = tru
           outline: dragging && snapEnabled ? "1px dashed rgba(250,204,21,0.85)" : "none",
           outlineOffset: "0px",
           boxSizing: "border-box",
+          position: style.position ?? "relative",
         }}
       >
-        {children}
+        <button
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={() => setCollapsed((old) => !old)}
+          title={collapsed ? "Expand panel" : "Collapse panel"}
+          style={{
+            position: "absolute",
+            top: "8px",
+            right: "8px",
+            width: "18px",
+            height: "18px",
+            zIndex: 100,
+            border: "1px solid rgba(253,230,138,0.24)",
+            borderRadius: "50%",
+            background: "rgba(28,25,23,0.86)",
+            color: "#fde68a",
+            cursor: "pointer",
+            fontSize: "12px",
+            lineHeight: "16px",
+            padding: 0,
+            fontFamily: "ui-monospace, monospace",
+          }}
+        >
+          {collapsed ? "+" : "−"}
+        </button>
+        {panelContent}
       </div>
     </>
   );

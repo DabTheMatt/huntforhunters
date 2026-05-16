@@ -11,6 +11,7 @@ export default function CompassPanel({
   buttonStyle,
   bearingLabel,
   formatTime,
+  collapsed = false,
 }) {
   const [stopwatchStartTime, setStopwatchStartTime] = useState(null);
   const [stopwatchHeldSeconds, setStopwatchHeldSeconds] = useState(0);
@@ -36,6 +37,13 @@ export default function CompassPanel({
   const stopwatchSecondAngle = (stopwatchSeconds % 60) * 6;
   const stopwatchMinuteAngle = ((stopwatchSeconds / 60) % 60) * 6;
 
+  if (collapsed) {
+    return (
+      <div style={{ ...panelStyle, width: "240px", minHeight: "44px", height: "44px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box" }}>
+        <div style={labelStyle}>Compass</div>
+      </div>
+    );
+  }
   return (
     <div style={{ ...panelStyle, width: "240px", height: "576px", overflow: "visible" }}>
       <div style={labelStyle}>Compass</div>

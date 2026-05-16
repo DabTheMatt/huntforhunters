@@ -6,7 +6,9 @@ import DraggablePanel from "./Components/DraggablePanel";
 
 import WeatherPanel from "./Components/WeatherPanel";
 import MapLayersPanel from "./Components/MapLayersPanel";
+
 import DevelopmentPanel from "./Components/DevelopmentPanel";
+import SimulationLog from "./Components/SimulationLog";
 
 
 /**
@@ -1585,20 +1587,6 @@ function AsdicPanel({ asdicVisible, setAsdicVisible, asdicContact, onPing, canPi
   );
 }
 
-function SimulationLog({ logs }) {
-  return (
-    <div style={{ height: "384px", overflow: "hidden", borderRadius: "16px", background: "rgba(12, 10, 9, 0.9)", color: "#f5f5f4", padding: "16px", boxShadow: "0 12px 28px rgba(0, 0, 0, 0.28)", boxSizing: "border-box" }}>
-      <div style={labelStyle}>Simulation Log</div>
-      <div style={{ height: "336px", overflow: "auto", paddingRight: "8px", marginTop: "8px", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: "12px", lineHeight: 1.6, color: "#d6d3d1", textAlign: "left" }}>
-        {[...logs].sort((a, b) => b.time.localeCompare(a.time)).map((log, i) => (
-          <div key={i} style={{ borderBottom: "1px solid rgba(41, 37, 36, 0.7)", padding: "4px 0" }}>
-            <span style={{ color: "#fde68a" }}>{log.time}</span> {log.message}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 
 
@@ -1994,7 +1982,11 @@ export default function App() {
         </DraggablePanel>
 
         <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", right: "24px", bottom: "24px", zIndex: 3, width: "432px" }}>
-          <SimulationLog logs={logs} />
+          <SimulationLog
+            panelStyle={panelStyle}
+            labelStyle={labelStyle}
+            simulationLog={logs}
+          />
         </DraggablePanel>
       </div>
     </div>
