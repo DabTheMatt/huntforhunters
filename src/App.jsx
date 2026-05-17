@@ -6,6 +6,7 @@ import DraggablePanel from "./Components/DraggablePanel";
 
 import WeatherPanel from "./Components/WeatherPanel";
 import MapLayersPanel from "./Components/MapLayersPanel";
+import AsdicPanel from "./Components/AsdicPanel";
 
 import DevelopmentPanel from "./Components/DevelopmentPanel";
 import SimulationLog from "./Components/SimulationLog";
@@ -32,6 +33,17 @@ const snapUiSize = (value) => Math.round(value / UI_SNAP_GRID_PX) * UI_SNAP_GRID
 const PANEL_HEIGHT_GRID_PX = 24;
 
 const MISSION_DATE_LABEL = "18 March 1943";
+const MISSION_AREA_LABEL = "Western Approaches gap · HX 229 / SC 122 crisis area";
+
+const MISSION_COORD_LABEL = "52°00′N 34°00′W";
+
+const MISSION_AIR_TEMP_C = 4;
+
+const MISSION_WATER_TEMP_C = 6;
+
+const MISSION_OVERBOARD_NOTE =
+
+  "Cold-water collapse risk: 30–60 min; survival often 1–3 h without rescue";
 const getCameraAltitudeM = (zoom) => Math.round(2600 / Math.max(zoom, 0.01));
 
 const getDaylightFactor = (simTime) => {
@@ -470,7 +482,7 @@ function predictShipTrack(
 
 // TODO(refactor): Move this whole canvas renderer to src/components/ChartTable.jsx.
 // Keep the current implementation here until the new file exists and imports are wired.
-function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseDeg, courseInput, courseKeepingEnabled, vectorsVisible, asdicVisible, asdicContact, contactPlot, ringVisible, ringAge, submarine, mapTheme, visualRangeVisible }) {
+function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseDeg, courseInput, courseKeepingEnabled, vectorsVisible, asdicVisible, asdicContact, contactPlot, ringVisible, ringAge, submarine, mapTheme, mapInfoVisible, visualRangeVisible, legendVisible, asdicMode, asdicSearchArcDeg, asdicSearchDirectionDeg }) {
   const canvasRef = useRef(null);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef({ active: false, x: 0, y: 0 });
@@ -653,14 +665,65 @@ function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseD
     const windEndY = windCenterY + wind.y * windHalfLength;
 
     const cameraAltitudeM = getCameraAltitudeM(zoom);
-    ctx.fillStyle = mapTheme === "atlantic" ? "rgba(215,236,236,0.92)" : "rgba(47, 74, 91, 0.9)";
-    ctx.font = "12px ui-monospace, monospace";
-    ctx.fillText(`SEA ${SEA_STATES[environment.seaIndex].label}`, 24, 36);
-    ctx.fillText(`CLOUD ${environment.cloudCoverOktas ?? 0}/8 · BASE ${environment.cloudBaseM ?? 1800} m`, 24, 54);
-    ctx.fillText(`VIEW ALT ${cameraAltitudeM} m AGL`, 24, 72);
-    if (visualRangeVisible) {
-      const visualRangeM = computeVisualRangeM(ship, environment);
-      ctx.fillText(`VISUAL ${Math.round(visualRangeM / 1000)} km · OUTSIDE CHART`, 24, 90);
+    const drawWrappedCanvasText = (text, x, y, maxChars = 40, lineHeight = 14) => {
+      const words = String(text ?? "").split(/\s+/).filter(Boolean);
+      const lines = [];
+      let currentLine = "";
+
+      words.forEach((word) => {
+        const nextLine = currentLine ? `${currentLine} ${word}` : word;
+        if (nextLine.length > maxChars && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = nextLine;
+        }
+      });
+
+      if (currentLine) lines.push(currentLine);
+      if (lines.length === 0) lines.push("");
+
+      lines.forEach((line, index) => {
+        ctx.fillText(line, x, y + index * lineHeight);
+      });
+
+      return y + lines.length * lineHeight;
+    };
+
+    if (mapInfoVisible) {
+      let infoY = 36;
+      ctx.fillStyle = mapTheme === "atlantic" ? "rgba(215,236,236,0.92)" : "rgba(47, 74, 91, 0.9)";
+      ctx.font = "12px ui-monospace, monospace";
+      infoY = drawWrappedCanvasText(environment.missionAreaLabel, 24, infoY, 40, 14);
+      infoY = drawWrappedCanvasText(`POSITION ${environment.missionCoordLabel}`, 24, infoY + 4, 40, 14);
+      infoY = drawWrappedCanvasText(`SEA ${SEA_STATES[environment.seaIndex].label} · AIR ${environment.airTempC}°C · WATER ${environment.waterTempC}°C`, 24, infoY + 4, 40, 14);
+      infoY = drawWrappedCanvasText(`CLOUD ${environment.cloudCoverOktas}/8 · BASE ${environment.cloudBaseM} m`, 24, infoY + 4, 40, 14);
+      infoY = drawWrappedCanvasText(`VIEW ALT ${cameraAltitudeM} m AGL`, 24, infoY + 4, 40, 14);
+
+      ctx.fillStyle = "rgba(253,230,138,0.82)";
+      infoY = drawWrappedCanvasText(`OVERBOARD: ${environment.overboardSurvivalNote}`, 24, infoY + 4, 40, 14);
+
+      if (visualRangeVisible) {
+        const visualRangeM = computeVisualRangeM(ship, environment);
+        const visualRangePx = visualRangeM * zoom;
+        const outsideChart =
+          cx - visualRangePx < 0 ||
+          cx + visualRangePx > w ||
+          cy - visualRangePx < 0 ||
+          cy + visualRangePx > h;
+
+        ctx.fillStyle = mapTheme === "atlantic" ? "rgba(215,236,236,0.92)" : "rgba(47, 74, 91, 0.9)";
+
+        drawWrappedCanvasText(
+          outsideChart
+            ? `VISUAL ${Math.round(visualRangeM / 1000)} km · OUTSIDE CHART`
+            : `VISUAL ${Math.round(visualRangeM / 1000)} km`,
+          24,
+          infoY + 4,
+          40,
+          14
+        );
+      }
     }
 
 
@@ -734,14 +797,14 @@ function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseD
 
     // ASDIC forward search cone and detected echo.
     const asdicRangeM = 3200;
-    const asdicArcDeg = 58;
+    const asdicArcDeg = asdicMode === "attack" ? 12 : asdicSearchArcDeg / 2;
     const asdicRangePx = asdicRangeM * zoom;
     const blindZonePx = 120 * zoom;
 
     if (vectorsVisible && asdicVisible) {
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(ship.headingDeg * DEG);
+      ctx.rotate((ship.headingDeg + asdicSearchDirectionDeg) * DEG);
 
       // Working sector: forward-facing cone from the bow, not a free-floating symbol.
       ctx.fillStyle = "rgba(18, 135, 67, 0.035)";
@@ -1077,7 +1140,7 @@ function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseD
 
         ctx.save();
         ctx.translate(cx, cy);
-        ctx.rotate(ship.headingDeg * DEG);
+        ctx.rotate((ship.headingDeg + asdicSearchDirectionDeg) * DEG);
         ctx.translate(0, -bowOffsetPx);
 
         ctx.strokeStyle = `rgba(134, 239, 172, ${0.95 * (1 - t)})`;
@@ -1237,19 +1300,21 @@ function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseD
     const metersShown = Math.round(100 / zoom);
     ctx.fillText(`${metersShown} m`, w - 158, h - 50);
     ctx.fillText(`GRID ${gridMeters} m`, w - 180, h - 22);
-    ctx.font = "11px ui-monospace, monospace";
-    if (vectorsVisible) {
-      ctx.fillStyle = "rgba(45, 111, 169, 0.88)";
-      ctx.fillText("— — predicted track 30s", 24, h - 96);
-      ctx.fillStyle = "rgba(49, 139, 119, 0.90)";
-      ctx.fillText("— — ordered heading", 24, h - 78);
-      ctx.fillStyle = "rgba(103, 86, 68, 0.82)";
-      ctx.fillText("— — current heading", 24, h - 60);
+    if (legendVisible) {
+      ctx.font = "11px ui-monospace, monospace";
+      if (vectorsVisible) {
+        ctx.fillStyle = "rgba(45, 111, 169, 0.88)";
+        ctx.fillText("— — predicted track 30s", 24, h - 96);
+        ctx.fillStyle = "rgba(49, 139, 119, 0.90)";
+        ctx.fillText("— — ordered heading", 24, h - 78);
+        ctx.fillStyle = "rgba(103, 86, 68, 0.82)";
+        ctx.fillText("— — current heading", 24, h - 60);
+      }
+      ctx.fillStyle = mapTheme === "atlantic" ? "rgba(215,236,236,0.62)" : "rgba(38, 61, 76, 0.56)";
+      ctx.fillText("— track history 60s", 24, h - 42);
+      ctx.fillStyle = "rgba(18, 135, 67, 0.58)";
+      ctx.fillText("— ASDIC cone / echo", 24, h - 24);
     }
-    ctx.fillStyle = mapTheme === "atlantic" ? "rgba(215,236,236,0.62)" : "rgba(38, 61, 76, 0.56)";
-    ctx.fillText("— track history 60s", 24, h - 42);
-    ctx.fillStyle = "rgba(18, 135, 67, 0.58)";
-    ctx.fillText("— ASDIC cone / echo", 24, h - 24);
 
     // Cloud renderer extraction checkpoint.
     // When src/renderers/cloudRenderer.js exists and passes parity, replace local helper with imported function.
@@ -1265,7 +1330,7 @@ function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseD
     ctx.textAlign = "center";
     ctx.fillText("Hunt For Hunters · Maciek Dąbrowski · 2026 · build 0.2", w / 2, h - 18);
     ctx.restore();
-  }, [ship, zoom, environment, controls, orderedCourseDeg, courseInput, courseKeepingEnabled, vectorsVisible, asdicVisible, asdicContact, contactPlot, ringVisible, ringAge, submarine, mapTheme, visualRangeVisible, panOffset]);
+  }, [ship, zoom, environment, controls, orderedCourseDeg, courseInput, courseKeepingEnabled, vectorsVisible, asdicVisible, asdicContact, contactPlot, ringVisible, ringAge, submarine, mapTheme, mapInfoVisible, visualRangeVisible, legendVisible, asdicMode, asdicSearchArcDeg, asdicSearchDirectionDeg, panOffset]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1544,52 +1609,6 @@ function InstrumentPanel({ ship, controls, setControls, environment, setEnvironm
   );
 }
 
-function AsdicPanel({ asdicVisible, setAsdicVisible, asdicContact, onPing, canPing, pingCooldownRemaining, asdicMode, onSetMode }) {
-  return (
-    <div style={{ ...panelStyle, height: "240px" }}>
-      <div style={labelStyle}>ASDIC Room</div>
-      <div style={{ marginTop: "2px", color: "#a8a29e", fontSize: "10px" }}>Manual ping · echo delay scaled for gameplay</div>
-      <div style={{ marginTop: "6px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px" }}>
-        <button style={{ ...(asdicMode === "search" ? activeButtonStyle : buttonStyle), fontSize: "10px", padding: "4px 5px" }} onClick={() => onSetMode("search")}>Order Search</button>
-        <button style={{ ...(asdicMode === "attack" ? activeButtonStyle : buttonStyle), fontSize: "10px", padding: "4px 5px" }} onClick={() => onSetMode("attack")}>Attack Pings</button>
-      </div>
-      <div style={{ marginTop: "6px", fontSize: "10px", color: "#d6d3d1", lineHeight: 1.3, textAlign: "left", overflowWrap: "anywhere" }}>
-        {asdicVisible
-          ? asdicContact.detected
-            ? `${asdicContact.quality} · ${bearingLabel(asdicContact.bearingDeg)} · ${(asdicContact.distanceM * 1.09361).toFixed(0)} yd`
-            : "No contact. Listening watch."
-          : "Display and plot hidden."}
-      </div>
-      <button
-        style={{
-          ...(canPing ? activeButtonStyle : buttonStyle),
-          marginTop: "8px",
-          width: "100%",
-          fontSize: "12px",
-        }}
-        disabled={!canPing}
-        onClick={onPing}
-      >
-        {canPing ? "PING" : `PING ${pingCooldownRemaining.toFixed(0)}s`}
-      </button>
-      <button
-        style={{
-          ...(asdicVisible ? activeButtonStyle : buttonStyle),
-          marginTop: "8px",
-          width: "100%",
-          fontSize: "12px",
-        }}
-        onClick={() => setAsdicVisible((visible) => !visible)}
-      >
-        ASDIC {asdicVisible ? "ON" : "OFF"}
-      </button>
-    </div>
-  );
-}
-
-
-
-
 export default function App() {
   const initialShipState = {
     x: 0,
@@ -1604,7 +1623,22 @@ export default function App() {
   };
   const [ship, setShip] = useState(initialShipState);
   const [controls, setControls] = useState({ telegraphIndex: TELEGRAPH.findIndex((mode) => mode.label === "Stop"), rudderDeg: 0 });
-  const [environment, setEnvironment] = useState({ seaIndex: 2, windDirDeg: 245, windKn: 22, wavesVisible: false, cloudsVisible: false, cloudCoverOktas: 5, cloudBaseM: 1800 });
+const [environment, setEnvironment] = useState({
+  seaIndex: 3,
+  windDirDeg: 250,
+  windKn: 28,
+  wavesVisible: true,
+  cloudsVisible: true,
+  cloudCoverOktas: 7,
+  cloudBaseM: 650,
+
+  airTempC: MISSION_AIR_TEMP_C,
+  waterTempC: MISSION_WATER_TEMP_C,
+  overboardSurvivalNote: MISSION_OVERBOARD_NOTE,
+
+  missionAreaLabel: MISSION_AREA_LABEL,
+  missionCoordLabel: MISSION_COORD_LABEL,
+});
   const [zoom, setZoom] = useState(0.22);
   const [timeScale, setTimeScale] = useState(1);
   const [paused, setPaused] = useState(false);
@@ -1613,9 +1647,13 @@ export default function App() {
   const [courseKeepingEnabled, setCourseKeepingEnabled] = useState(false);
   const [vectorsVisible, setVectorsVisible] = useState(true);
   const [visualRangeVisible, setVisualRangeVisible] = useState(true);
+  const [mapInfoVisible, setMapInfoVisible] = useState(true);
+  const [legendVisible, setLegendVisible] = useState(true);
   const [mapTheme, setMapTheme] = useState("atlantic");
   const [asdicVisible, setAsdicVisible] = useState(true);
   const [asdicMode, setAsdicMode] = useState("manual");
+  const [asdicSearchArcDeg, setAsdicSearchArcDeg] = useState(180);
+  const [asdicSearchDirectionDeg, setAsdicSearchDirectionDeg] = useState(0);
   const [uiSnapEnabled, setUiSnapEnabled] = useState(true);
   const [submarine, setSubmarine] = useState(getInitialSubmarineState());
   const rawAsdicContact = useMemo(
@@ -1655,7 +1693,8 @@ export default function App() {
         };
   const [logs, setLogs] = useState([
     { time: "09:00:00", message: "HMS Grafton L83 standing by. Chart table active." },
-    { time: "09:00:00", message: "Weather desk reports Sea State 4, wind 245 at 22 knots." },
+    { time: "09:00:00", message: `Mission area fixed at ${MISSION_COORD_LABEL}. Air 4°C, water 6°C.` },
+    { time: "09:00:00", message: "Weather desk reports Sea State 6, wind 250 at 28 knots, low cloud and rough Atlantic swell." },
   ]);
 
   const lastLogRef = useRef({ telegraph: TELEGRAPH.findIndex((mode) => mode.label === "Stop"), rudder: 0, sea: 2, minute: -1, asdicMinute: -1 });
@@ -1777,7 +1816,8 @@ export default function App() {
   };
 
   const handleAsdicPing = () => {
-    if (!canPing) return;
+    const autoPingActive = asdicMode !== "manual";
+    if (autoPingActive && !canPing) return;
 
     const contactSnapshot = rawAsdicContact;
     if (contactSnapshot.detected) {
@@ -1850,9 +1890,13 @@ export default function App() {
     setCourseInput("");
     setVectorsVisible(true);
     setVisualRangeVisible(true);
+    setMapInfoVisible(true);
+    setLegendVisible(true);
     setMapTheme("atlantic");
     setAsdicVisible(true);
     setAsdicMode("manual");
+    setAsdicSearchArcDeg(180);
+    setAsdicSearchDirectionDeg(0);
     setUiSnapEnabled(true);
     setEnvironment((env) => ({ ...env, cloudsVisible: false }));
     setLogs([
@@ -1897,7 +1941,12 @@ export default function App() {
             ringAge={ringAge}
             submarine={submarine}
             mapTheme={mapTheme}
+            mapInfoVisible={mapInfoVisible}
             visualRangeVisible={visualRangeVisible}
+            legendVisible={legendVisible}
+            asdicMode={asdicMode}
+            asdicSearchArcDeg={asdicSearchArcDeg}
+            asdicSearchDirectionDeg={asdicSearchDirectionDeg}
           />
         </div>
 
@@ -1935,6 +1984,12 @@ export default function App() {
             pingCooldownRemaining={pingCooldownRemaining}
             asdicMode={asdicMode}
             onSetMode={handleAsdicMode}
+            bearingLabel={bearingLabel}
+            buttonStyle={buttonStyle}
+            activeButtonStyle={activeButtonStyle}
+            onSetSearchArc={setAsdicSearchArcDeg}
+            onSetSearchDirection={setAsdicSearchDirectionDeg}
+            shipHeadingDeg={ship.headingDeg}
           />
         </DraggablePanel>
 
@@ -1953,7 +2008,7 @@ export default function App() {
           />
         </DraggablePanel>
 
-        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", left: "calc(50% + 144px)", bottom: "48px", zIndex: 3, width: "192px" }}>
+        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", left: "calc(50% + 144px)", bottom: "48px", zIndex: 3, width: "168px" }}>
           <MapLayersPanel
             environment={environment}
             setEnvironment={setEnvironment}
@@ -1961,6 +2016,10 @@ export default function App() {
             setVectorsVisible={setVectorsVisible}
             visualRangeVisible={visualRangeVisible}
             setVisualRangeVisible={setVisualRangeVisible}
+            mapInfoVisible={mapInfoVisible}
+            setMapInfoVisible={setMapInfoVisible}
+            legendVisible={legendVisible}
+            setLegendVisible={setLegendVisible}
             mapTheme={mapTheme}
             setMapTheme={setMapTheme}
             uiSnapEnabled={uiSnapEnabled}

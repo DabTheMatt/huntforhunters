@@ -149,17 +149,16 @@ export default function DevelopmentPanel({
     return (
       <div
         style={{
-          ...(panelStyle ?? {}),
-          background: panelStyle?.background ?? "rgba(28,25,23,0.92)",
-          border: panelStyle?.border ?? "1px solid rgba(253,230,138,0.16)",
-          borderRadius: panelStyle?.borderRadius ?? "18px",
-          boxShadow: panelStyle?.boxShadow ?? "0 10px 30px rgba(0,0,0,0.32)",
           width: "100%",
           minHeight: "44px",
           height: "44px",
           boxSizing: "border-box",
           overflow: "hidden",
-          padding: "14px 36px 10px 18px",
+          padding: 0,
+          background: "transparent",
+          border: "none",
+          borderRadius: 0,
+          boxShadow: "none",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -182,30 +181,17 @@ export default function DevelopmentPanel({
   return (
     <div
       style={{
-        ...(panelStyle ?? {}),
-        background: panelStyle?.background ?? "rgba(28,25,23,0.92)",
-        border: panelStyle?.border ?? "1px solid rgba(253,230,138,0.16)",
-        borderRadius: panelStyle?.borderRadius ?? "18px",
-        boxShadow: panelStyle?.boxShadow ?? "0 10px 30px rgba(0,0,0,0.32)",
         minHeight: "240px",
         width: "100%",
         boxSizing: "border-box",
         overflow: "hidden",
-        padding: "20px 18px 18px",
+        padding: "0 18px 18px",
+        background: "transparent",
+        border: "none",
+        borderRadius: 0,
+        boxShadow: "none",
       }}
     >
-      <div
-        style={{
-          ...(labelStyle ?? {}),
-          fontSize: labelStyle?.fontSize ?? "10px",
-          textAlign: "center",
-          marginBottom: "18px",
-          letterSpacing: labelStyle?.letterSpacing,
-        }}
-      >
-        DEVELOPMENT
-      </div>
-
       <div style={{ ...sectionTitleStyle, marginBottom: "8px" }}>
         Stability Watch
       </div>

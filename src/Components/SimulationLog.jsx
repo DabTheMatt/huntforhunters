@@ -1,5 +1,3 @@
-
-
 export default function SimulationLog({
   panelStyle,
   labelStyle,
@@ -22,7 +20,6 @@ export default function SimulationLog({
           justifyContent: "center",
         }}
       >
-        <div style={labelStyle}>Log</div>
       </div>
     );
   }
@@ -30,27 +27,28 @@ export default function SimulationLog({
   return (
     <div
       style={{
-        ...(panelStyle ?? {}),
         width: "432px",
         minHeight: "240px",
         transformOrigin: "top center",
         boxSizing: "border-box",
         overflow: "hidden",
-        padding: "14px 16px 16px",
+        padding: "0 16px 16px",
+        background: "transparent",
+        border: "none",
+        borderRadius: 0,
       }}
     >
-      <div style={{ ...labelStyle, textAlign: "center", marginBottom: "12px" }}>
-        LOG
-      </div>
 
       <div
         style={{
           maxHeight: "150px",
+          marginTop: "12px",
           overflowY: "auto",
           fontSize: "11px",
           lineHeight: 1.35,
           color: "#d6d3d1",
           fontFamily: "ui-monospace, monospace",
+          textAlign: "left",
         }}
       >
         {simulationLog.length === 0 ? (
