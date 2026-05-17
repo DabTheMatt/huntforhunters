@@ -13,13 +13,23 @@ export default function MapLayersPanel({
   setUiSnapEnabled,
   legendVisible,
   setLegendVisible,
-  AutoPanel,
-  labelStyle,
   buttonStyle,
   activeButtonStyle,
 }) {
   return (
-    <AutoPanel minHeight={220}>
+    <div
+      style={{
+        minHeight: "220px",
+        width: "100%",
+        boxSizing: "border-box",
+        padding: "8px 12px 14px",
+        background: "transparent",
+        border: "none",
+        borderRadius: 0,
+        boxShadow: "none",
+        overflow: "hidden",
+      }}
+    >
 
       <button
         style={{ ...(environment.cloudsVisible ? activeButtonStyle : buttonStyle), marginTop: "6px", width: "100%", fontSize: "10px", padding: "4px 4px" }}
@@ -33,6 +43,18 @@ export default function MapLayersPanel({
         onClick={() => setEnvironment((env) => ({ ...env, wavesVisible: !env.wavesVisible }))}
       >
         Waves {environment.wavesVisible ? "ON" : "OFF"}
+      </button>
+
+      <button
+        style={{ ...((environment.rainIntensity ?? 0) > 0.02 ? activeButtonStyle : buttonStyle), marginTop: "6px", width: "100%", fontSize: "10px", padding: "4px 4px" }}
+        onClick={() =>
+          setEnvironment((env) => ({
+            ...env,
+            rainIntensity: (env.rainIntensity ?? 0) > 0.02 ? 0 : 0.35,
+          }))
+        }
+      >
+        Rain {(environment.rainIntensity ?? 0) > 0.02 ? "ON" : "OFF"}
       </button>
 
       <button
@@ -76,6 +98,6 @@ export default function MapLayersPanel({
       >
         UI snap {uiSnapEnabled ? "ON" : "OFF"}
       </button>
-    </AutoPanel>
+    </div>
   );
 }

@@ -7,9 +7,15 @@ import DraggablePanel from "./Components/DraggablePanel";
 import WeatherPanel from "./Components/WeatherPanel";
 import MapLayersPanel from "./Components/MapLayersPanel";
 import AsdicPanel from "./Components/AsdicPanel";
+import BridgePanel from "./Components/BridgePanel";
 
 import DevelopmentPanel from "./Components/DevelopmentPanel";
 import SimulationLog from "./Components/SimulationLog";
+
+import ZoomPanel from "./Components/ZoomPanel";
+import RudderPanel from "./Components/RudderPanel";
+import DateTimePanel from "./Components/DateTimePanel";
+import EngineTelegraphPanel from "./Components/EngineTelegraphPanel";
 
 
 /**
@@ -373,21 +379,35 @@ function chooseGridSpacingMeters(zoom) {
 }
 
 function useAnimationFrame(callback) {
-  const requestRef = useRef();
-  const previousTimeRef = useRef();
+  const requestRef = useRef(null);
+  const previousTimeRef = useRef(undefined);
+  const callbackRef = useRef(callback);
+
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     const animate = (time) => {
       if (previousTimeRef.current !== undefined) {
         const deltaTime = (time - previousTimeRef.current) / 1000;
-        callback(deltaTime);
+        callbackRef.current(deltaTime);
       }
+
       previousTimeRef.current = time;
       requestRef.current = requestAnimationFrame(animate);
     };
+
     requestRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(requestRef.current);
-  }, [callback]);
+
+    return () => {
+      if (requestRef.current !== null) {
+        cancelAnimationFrame(requestRef.current);
+      }
+      requestRef.current = null;
+      previousTimeRef.current = undefined;
+    };
+  }, []);
 }
 
 function simulateShip(ship, controls, environment, dt) {
@@ -528,6 +548,8 @@ function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseD
     if (environment.wavesVisible) {
       drawSeaTexture(ctx, w, h, ship, zoom, environment);
     }
+
+    // [Rain overlay block removed from here]
 
     // Subtle paper grain/grid — world-space grid, scaled by zoom
     ctx.globalAlpha = mapTheme === "atlantic" ? 0.18 : 0.16;
@@ -1323,6 +1345,60 @@ function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseD
     // wind drift, theme colors and camera-altitude fade exactly.
     drawCloudLayerExternal(ctx, w, h, ship, environment, mapTheme, zoom, panOffset);
 
+    // Atlantic rain / squalls — visible vertical rain layer.
+    if ((environment.rainIntensity ?? 0) > 0.02) {
+      const rainIntensity = clamp(environment.rainIntensity, 0, 1);
+      const rainVector = headingToVector(environment.windDirDeg);
+      const rainAngle = Math.atan2(rainVector.y, rainVector.x) + Math.PI * 2;
+      const dropCount = Math.round(90 + rainIntensity * 260);
+      const dropLength = 10 + rainIntensity * 20;
+      const rainPhase = ship.simTime * (55 + rainIntensity * 35);
+
+      ctx.save();
+      ctx.strokeStyle = `rgba(215,236,236,${0.16 + rainIntensity * 0.24})`;
+      ctx.lineWidth = 1.15;
+      ctx.lineCap = "round";
+
+      for (let i = 0; i < dropCount; i += 1) {
+        const seedX = (i * 73) % w;
+        const seedY = (i * 137) % h;
+        const dx = Math.cos(rainAngle) * dropLength;
+        const dy = Math.sin(rainAngle) * dropLength;
+        const x = ((seedX + Math.cos(rainAngle) * rainPhase) % w + w) % w;
+        const y = ((seedY + Math.sin(rainAngle) * rainPhase) % h + h) % h;
+
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + dx, y + dy);
+        ctx.stroke();
+      }
+
+      // Faster foreground rain layer with slight parallax.
+      ctx.strokeStyle = `rgba(235,247,247,${0.10 + rainIntensity * 0.18})`;
+      ctx.lineWidth = 1.35;
+      const foregroundDropCount = Math.round(18 + rainIntensity * 74);
+      const foregroundDropLength = dropLength * 1.55;
+      const foregroundPhase = rainPhase * 1.65;
+      const parallaxX = panOffset.x * 0.018;
+      const parallaxY = panOffset.y * 0.018;
+
+      for (let i = 0; i < foregroundDropCount; i += 1) {
+        const seedX = (i * 191 + 37) % w;
+        const seedY = (i * 277 + 91) % h;
+        const dx = Math.cos(rainAngle) * foregroundDropLength;
+        const dy = Math.sin(rainAngle) * foregroundDropLength;
+        const x = ((seedX + Math.cos(rainAngle) * foregroundPhase + parallaxX) % w + w) % w;
+        const y = ((seedY + Math.sin(rainAngle) * foregroundPhase + parallaxY) % h + h) % h;
+
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + dx, y + dy);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.globalAlpha = 0.34;
     ctx.fillStyle = chartColors.text;
@@ -1402,31 +1478,6 @@ function ChartTable({ ship, zoom, setZoom, environment, controls, orderedCourseD
 }
 
 
-function ZoomPanel({ zoom, setZoom }) {
-  return (
-    <div style={{ ...panelStyle, height: "72px" }}>
-      <div style={labelStyle}>Zoom</div>
-      <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
-        <input
-          type="range"
-          min="0.01"
-          max="8"
-          step="0.01"
-          value={zoom}
-          style={{ flex: 1 }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => setZoom(Number(e.target.value))}
-        />
-        <div style={{ minWidth: "48px", textAlign: "right", fontFamily: "ui-monospace, monospace", fontSize: "12px" }}>
-          {zoom.toFixed(2)}x
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 
 
 const panelStyle = {
@@ -1488,36 +1539,9 @@ function InstrumentPanel({ ship, controls, setControls, environment, setEnvironm
   const speedKn = ship.speedMps * MPS_TO_KNOT;
   const turningDiameterM = computeTurningDiameterM(ship, controls, environment);
 
-  const setRudder = (delta) => {
-    setCourseKeepingEnabled(false);
-    setControls((c) => ({ ...c, rudderDeg: clamp(c.rudderDeg + delta, -GRAFTON.maxRudderDeg, GRAFTON.maxRudderDeg) }));
-  };
   return (
     <div style={{ display: "grid", gridTemplateColumns: "192px 192px", gap: "24px", alignItems: "start" }}>
-      <DraggablePanel snapEnabled={uiSnapEnabled} style={{ ...panelStyle, width: "192px", height: "336px" }}>
-        <div style={labelStyle}>Bridge</div>
-        <div style={{ marginTop: "5px", fontSize: "15px", fontWeight: 600 }}>
-          {GRAFTON.name} <span style={{ color: "#a8a29e" }}>{GRAFTON.pennant}</span>
-        </div>
-        <div style={{ marginTop: "2px", fontSize: "11px", color: "#d6d3d1" }}>{GRAFTON.className}</div>
-        <div style={{ marginTop: "8px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px" }}>
-          <StatusBox label="Course" value={bearingLabel(ship.headingDeg)} />
-          <StatusBox label="Speed" value={`${speedKn.toFixed(1)} kn`} />
-          <StatusBox label="Roll" value={`${ship.rollDeg.toFixed(1)}°`} />
-          <StatusBox label="Pitch" value={`${ship.pitchDeg.toFixed(1)}°`} />
-        </div>
-
-        <div style={{ marginTop: "6px", borderRadius: "10px", background: "#292524", padding: "8px", fontSize: "10px", lineHeight: 1.35, overflowWrap: "anywhere" }}>
-          <div style={{ ...labelStyle, marginBottom: "3px" }}>ASDIC</div>
-          <div style={{ fontWeight: 700, color: asdicContact.detected ? "#86efac" : "#d6d3d1" }}>
-            {asdicContact.detected
-              ? `${asdicContact.quality} · ${bearingLabel(asdicContact.bearingDeg)} · ${(asdicContact.distanceM * 1.09361).toFixed(0)} yd`
-              : "NO CONTACT"}
-          </div>
-        </div>
-      </DraggablePanel>
-
-      <DraggablePanel snapEnabled={uiSnapEnabled} width="240px" style={{ position: "fixed", right: "240px", top: "240px", zIndex: 3 }}>
+      <DraggablePanel snapEnabled={uiSnapEnabled} width="240px" style={{ position: "fixed", right: "24px", top: "12px", zIndex: 3 }}>
         <CompassPanel
           ship={ship}
           environment={environment}
@@ -1532,78 +1556,75 @@ function InstrumentPanel({ ship, controls, setControls, environment, setEnvironm
         />
       </DraggablePanel>
 
-      <DraggablePanel snapEnabled={uiSnapEnabled} style={{ ...panelStyle, width: "192px", height: "288px" }}>
-        <div style={labelStyle}>Engine Telegraph</div>
-        <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "3px" }}>
-          {[...TELEGRAPH].reverse().map((mode) => {
-            const originalIndex = TELEGRAPH.findIndex((item) => item.label === mode.label);
-            return (
-              <button
-                key={mode.label}
-                onClick={() => setControls((c) => ({ ...c, telegraphIndex: originalIndex }))}
-                style={{
-                  ...(controls.telegraphIndex === originalIndex ? activeButtonStyle : buttonStyle),
-                  width: "100%",
-                  textAlign: "center",
-                  padding: "3px 5px",
-                  fontSize: "10px",
-                }}
-              >
-                {mode.shortLabel}
-              </button>
-            );
-          })}
-        </div>
-      </DraggablePanel>
-
-      <DraggablePanel snapEnabled={uiSnapEnabled} style={{ ...panelStyle, width: "192px", height: "192px" }}>
-        <div style={labelStyle}>Rudder</div>
-        <div style={{ marginTop: "8px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "5px" }}>
-          <button style={buttonStyle} onClick={() => setRudder(-5)}>Port 5</button>
-          <button style={buttonStyle} onClick={() => { setCourseKeepingEnabled(false); setControls((c) => ({ ...c, rudderDeg: 0 })); }}>Midships</button>
-          <button style={buttonStyle} onClick={() => setRudder(5)}>Stbd 5</button>
-        </div>
-        <div style={{ marginTop: "8px", borderRadius: "10px", background: "#292524", padding: "8px", textAlign: "center", fontSize: "18px", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-          {Math.round(controls.rudderDeg) < 0 ? "P" : Math.round(controls.rudderDeg) > 0 ? "S" : "M"} {Math.abs(Math.round(controls.rudderDeg))}°
-        </div>
-        <input
-          style={{ marginTop: "8px", width: "100%" }}
-          type="range"
-          min={-GRAFTON.maxRudderDeg}
-          max={GRAFTON.maxRudderDeg}
-          step="1"
-          value={controls.rudderDeg}
-          onChange={(e) => { setCourseKeepingEnabled(false); setControls((c) => ({ ...c, rudderDeg: Math.round(Number(e.target.value)) })); }}
+      <DraggablePanel
+        snapEnabled={uiSnapEnabled}
+        style={{
+          position: "fixed",
+          left: "calc(50% - 788px)",
+          bottom: "36px",
+          zIndex: 3,
+          ...panelStyle,
+          width: "192px",
+          height: "264px",
+        }}
+      >
+        <EngineTelegraphPanel
+          controls={controls}
+          setControls={setControls}
+          telegraph={TELEGRAPH}
+          buttonStyle={buttonStyle}
+          activeButtonStyle={activeButtonStyle}
         />
-        <div
-          style={{
-            marginTop: "6px",
-            fontSize: "9px",
-            color: "#fde68a",
-            lineHeight: 1.25,
-            textAlign: "center",
-            fontWeight: 700,
-          }}
-        >
-          Turn circle: {turningDiameterM ? `${Math.round(turningDiameterM)} m Ø` : "—"}
-        </div>
       </DraggablePanel>
 
-      <DraggablePanel snapEnabled={uiSnapEnabled} style={{ ...panelStyle, width: "192px", minHeight: "144px", height: "auto" }}>
-        <div style={labelStyle}>Date & Time</div>
-        <div style={{ marginTop: "5px", fontSize: "12px", color: "#d6d3d1", fontWeight: 600 }}>{MISSION_DATE_LABEL}</div>
-        <div style={{ marginTop: "5px", fontSize: "14px", fontWeight: 600 }}>{formatTime(ship.simTime)}</div>
-        <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
-          {[0.5, 1, 5, 10, 20, 100].map((s) => (
-            <button key={s} style={timeScale === s ? activeButtonStyle : buttonStyle} onClick={() => setTimeScale(s)}>
-              {s}x
-            </button>
-          ))}
-          <button style={paused ? dangerButtonStyle : buttonStyle} onClick={() => setPaused((p) => !p)}>
-            {paused ? "Paused" : "Pause"}
-          </button>
-        </div>
-        {/* Removed: Sea state select and Waves button */}
+      <DraggablePanel
+        snapEnabled={uiSnapEnabled}
+        style={{
+          position: "fixed",
+          left: "calc(50% - 584px)",
+          bottom: "36px",
+          zIndex: 3,
+          ...panelStyle,
+          width: "192px",
+          height: "264px",
+        }}
+      >
+        <RudderPanel
+          controls={controls}
+          setControls={setControls}
+          setCourseKeepingEnabled={setCourseKeepingEnabled}
+          courseKeepingEnabled={courseKeepingEnabled}
+          turningDiameterM={turningDiameterM}
+          maxRudderDeg={GRAFTON.maxRudderDeg}
+          buttonStyle={buttonStyle}
+        />
+      </DraggablePanel>
+
+      <DraggablePanel
+        snapEnabled={uiSnapEnabled}
+        style={{
+          position: "fixed",
+          left: "calc(50% - 348px)",
+          top: "28px",
+          zIndex: 3,
+          ...panelStyle,
+          width: "216px",
+          minHeight: "120px",
+          height: "auto",
+        }}
+      >
+        <DateTimePanel
+          ship={ship}
+          timeScale={timeScale}
+          setTimeScale={setTimeScale}
+          paused={paused}
+          setPaused={setPaused}
+          labelStyle={labelStyle}
+          activeButtonStyle={activeButtonStyle}
+          buttonStyle={buttonStyle}
+          dangerButtonStyle={dangerButtonStyle}
+          formatTime={formatTime}
+        />
       </DraggablePanel>
     </div>
   );
@@ -1627,10 +1648,11 @@ const [environment, setEnvironment] = useState({
   seaIndex: 3,
   windDirDeg: 250,
   windKn: 28,
-  wavesVisible: true,
-  cloudsVisible: true,
+  wavesVisible: false,
+  cloudsVisible: false,
   cloudCoverOktas: 7,
   cloudBaseM: 650,
+  rainIntensity: 0,
 
   airTempC: MISSION_AIR_TEMP_C,
   waterTempC: MISSION_WATER_TEMP_C,
@@ -1694,7 +1716,7 @@ const [environment, setEnvironment] = useState({
   const [logs, setLogs] = useState([
     { time: "09:00:00", message: "HMS Grafton L83 standing by. Chart table active." },
     { time: "09:00:00", message: `Mission area fixed at ${MISSION_COORD_LABEL}. Air 4°C, water 6°C.` },
-    { time: "09:00:00", message: "Weather desk reports Sea State 6, wind 250 at 28 knots, low cloud and rough Atlantic swell." },
+    { time: "09:00:00", message: "Weather desk reports Sea State 6, wind 250 at 28 knots, rain squalls, low cloud and rough Atlantic swell." },
   ]);
 
   const lastLogRef = useRef({ telegraph: TELEGRAPH.findIndex((mode) => mode.label === "Stop"), rudder: 0, sea: 2, minute: -1, asdicMinute: -1 });
@@ -1707,6 +1729,17 @@ const [environment, setEnvironment] = useState({
 
       if (courseKeepingEnabled && effectiveControls.rudderDeg !== controls.rudderDeg) {
         setControls((current) => ({ ...current, rudderDeg: effectiveControls.rudderDeg }));
+      }
+
+      if (
+        courseKeepingEnabled &&
+        orderedCourseDeg !== null &&
+        Number.isFinite(orderedCourseDeg) &&
+        Math.abs(signedAngleDiffDeg(s.headingDeg, orderedCourseDeg)) < 1.5 &&
+        Math.abs(effectiveControls.rudderDeg) <= 1
+      ) {
+        setCourseKeepingEnabled(false);
+        setControls((current) => ({ ...current, rudderDeg: 0 }));
       }
 
       return simulateShip(s, effectiveControls, environment, scaledDt);
@@ -1729,8 +1762,14 @@ const [environment, setEnvironment] = useState({
       lastLogRef.current.telegraph = controls.telegraphIndex;
     }
     if (lastLogRef.current.rudder !== controls.rudderDeg) {
-      nextLogs.push({ time: formatTime(ship.simTime), message: `Helm: ${controls.rudderDeg === 0 ? "Midships" : `${controls.rudderDeg < 0 ? "Port" : "Starboard"} ${Math.abs(controls.rudderDeg)} degrees`}.` });
-      lastLogRef.current.rudder = controls.rudderDeg;
+      const previousRudderDeg = lastLogRef.current.rudder;
+      const currentRudderDeg = controls.rudderDeg;
+
+      if (previousRudderDeg !== 0 && currentRudderDeg === 0) {
+        nextLogs.push({ time: formatTime(ship.simTime), message: "Helm: Midships. Turn completed." });
+      }
+
+      lastLogRef.current.rudder = currentRudderDeg;
     }
     if (lastLogRef.current.sea !== environment.seaIndex) {
       nextLogs.push({ time: formatTime(ship.simTime), message: `Weather desk updates sea state: ${SEA_STATES[environment.seaIndex].label}.` });
@@ -1755,6 +1794,9 @@ const [environment, setEnvironment] = useState({
       const courseDigit = /^Numpad[0-9]$/.test(e.code) ? e.code.replace("Numpad", "") : e.key;
       if (isCourseDigit && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
         setCourseInput((current) => (current + courseDigit).slice(0, 3));
         return;
       }
@@ -1898,7 +1940,12 @@ const [environment, setEnvironment] = useState({
     setAsdicSearchArcDeg(180);
     setAsdicSearchDirectionDeg(0);
     setUiSnapEnabled(true);
-    setEnvironment((env) => ({ ...env, cloudsVisible: false }));
+    setEnvironment((env) => ({
+      ...env,
+      cloudsVisible: false,
+      wavesVisible: false,
+      rainIntensity: 0,
+    }));
     setLogs([
       { time: "09:00:00", message: "HMS Grafton L83 standing by. Chart table active." },
       { time: "09:00:00", message: "Sea trial reset. Awaiting bridge orders." },
@@ -1950,7 +1997,7 @@ const [environment, setEnvironment] = useState({
           />
         </div>
 
-        <div style={{ position: "fixed", left: "24px", bottom: "24px", zIndex: 3, width: "408px", maxWidth: "408px" }}>
+        <div style={{ position: "fixed", left: "28px", bottom: "28px", zIndex: 3, width: "408px", maxWidth: "408px" }}>
         <InstrumentPanel
           ship={ship}
           controls={controls}
@@ -1974,7 +2021,16 @@ const [environment, setEnvironment] = useState({
         />
         </div>
 
-        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", left: "24px", top: "168px", zIndex: 3, width: "192px" }}>
+        <DraggablePanel
+          snapEnabled={uiSnapEnabled}
+          style={{
+            position: "fixed",
+            left: "12px",
+            top: "228px",
+            zIndex: 3,
+            width: "192px",
+          }}
+        >
           <AsdicPanel
             asdicVisible={asdicVisible}
             setAsdicVisible={setAsdicVisible}
@@ -1993,11 +2049,32 @@ const [environment, setEnvironment] = useState({
           />
         </DraggablePanel>
 
-        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", left: "calc(50% - 120px)", bottom: "48px", zIndex: 3, width: "240px" }}>
+        <DraggablePanel
+          key="bridge-state-board-v2"
+          snapEnabled={uiSnapEnabled}
+          width="760px"
+          style={{ position: "fixed", left: "calc(50% - 380px)", bottom: "48px", zIndex: 5, width: "760px", height: "132px" }}
+        >
+          <div style={labelStyle}>HMS Grafton · Hunt-class Type III Escort Destroyer</div>
+          <BridgePanel
+            ship={ship}
+            speedKn={ship.speedMps * MPS_TO_KNOT}
+            asdicContact={asdicContact}
+            grafton={GRAFTON}
+            bearingLabel={bearingLabel}
+            orderedCourseDeg={orderedCourseDeg}
+            courseKeepingEnabled={courseKeepingEnabled}
+            environment={environment}
+            controls={controls}
+          />
+        </DraggablePanel>
+
+        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", left: "calc(50% - 120px)", top: "28px", zIndex: 3, width: "240px" }}>
           <ZoomPanel zoom={zoom} setZoom={setZoom} />
         </DraggablePanel>
 
-        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", left: "456px", bottom: "24px", zIndex: 3, width: "192px" }}>
+
+        <DraggablePanel key="weather-panel-map-corner-v2" snapEnabled={uiSnapEnabled} style={{ position: "fixed", right: "276px", top: "12px", zIndex: 3, width: "192px" }}>
           <WeatherPanel
             environment={environment}
             setEnvironment={setEnvironment}
@@ -2008,7 +2085,12 @@ const [environment, setEnvironment] = useState({
           />
         </DraggablePanel>
 
-        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", left: "calc(50% + 144px)", bottom: "48px", zIndex: 3, width: "168px" }}>
+        <DraggablePanel
+          key="map-layers-default-collapsed-v2"
+          snapEnabled={uiSnapEnabled}
+          defaultCollapsed={true}
+          style={{ position: "fixed", left: "calc(50% + 132px)", top: "28px", zIndex: 3, width: "192px" }}
+        >
           <MapLayersPanel
             environment={environment}
             setEnvironment={setEnvironment}
@@ -2031,16 +2113,7 @@ const [environment, setEnvironment] = useState({
           />
         </DraggablePanel>
 
-        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", right: "24px", top: "24px", zIndex: 3, width: "336px" }}>
-        <DevelopmentPanel
-          onFullAhead={handleFullAhead}
-          onHardStarboard={handleHardStarboard}
-          onCrashStop={handleCrashStop}
-          onReset={handleResetTrial}
-        />
-        </DraggablePanel>
-
-        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", right: "24px", bottom: "24px", zIndex: 3, width: "432px" }}>
+        <DraggablePanel snapEnabled={uiSnapEnabled} style={{ position: "fixed", right: "28px", bottom: "28px", zIndex: 3, width: "432px" }}>
           <SimulationLog
             panelStyle={panelStyle}
             labelStyle={labelStyle}

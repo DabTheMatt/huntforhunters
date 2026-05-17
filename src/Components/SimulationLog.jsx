@@ -54,7 +54,7 @@ export default function SimulationLog({
         {simulationLog.length === 0 ? (
           <div style={{ opacity: 0.65 }}>Awaiting simulation events...</div>
         ) : (
-          simulationLog.slice().reverse().map((entry, index) => {
+          simulationLog.map((entry, index) => {
             const time = typeof entry === "object" && entry !== null ? entry.time : "";
             const message = typeof entry === "object" && entry !== null ? entry.message : String(entry);
 

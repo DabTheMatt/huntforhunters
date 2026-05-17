@@ -74,9 +74,15 @@ const getPanelTitleFromChild = (child) => {
   if (childIdentity.includes("maplayers") || childIdentity.includes("map-layers") || childIdentity.includes("map layers")) return "Map Layers";
   if (childIdentity.includes("enginetelegraph") || childIdentity.includes("engine-telegraph") || childIdentity.includes("engine telegraph")) return "Engine Telegraph";
   if (childIdentity.includes("rudder")) return "Rudder Orders";
-  if (childIdentity.includes("date") || childIdentity.includes("time")) return "Date & Time";
+  if (childIdentity.includes("date") || childIdentity.includes("time")) return "17 MAY 1943";
   if (childIdentity.includes("zoom")) return "Zoom";
-  if (childIdentity.includes("bridge")) return "Bridge";
+  if (childIdentity.includes("bridge")) {
+    const grafton = child.props?.grafton;
+    if (grafton?.name && grafton?.className) {
+      return `Bridge · ${grafton.name} · ${grafton.className}`;
+    }
+    return "Bridge";
+  }
   if (childIdentity.includes("weather")) return "Weather";
   if (childIdentity.includes("asdic")) return "ASDIC";
   if (childIdentity.includes("compass")) return "Compass";
@@ -221,10 +227,10 @@ const findOpenPanelPosition = ({ left, top, width, height }, panelId) => {
   return boundedInitialPosition;
 };
 
-export default function DraggablePanel({ children, style = {}, snapEnabled = true, width }) {
+export default function DraggablePanel({ children, style = {}, snapEnabled = true, width, defaultCollapsed = false }) {
   const [position, setPosition] = useState(null);
   const [dragging, setDragging] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [panelTitle, setPanelTitle] = useState("Panel");
   const initializedRef = useRef(false);
   const dragStartRef = useRef(null);
@@ -254,12 +260,19 @@ export default function DraggablePanel({ children, style = {}, snapEnabled = tru
     const rect = panelRef.current.getBoundingClientRect();
     const panelText = panelRef.current.textContent ?? "";
     const childTitle = getPanelTitleFromChild(children);
-    const layoutPreference = getPanelLayoutPreference({
-      text: panelText,
-      layoutKey: getPanelLayoutKeyFromChild(children),
-      width: rect.width,
-      height: rect.height,
-    });
+    const hasExplicitPosition =
+      style.left !== undefined ||
+      style.right !== undefined ||
+      style.top !== undefined ||
+      style.bottom !== undefined;
+    const layoutPreference = hasExplicitPosition
+      ? null
+      : getPanelLayoutPreference({
+          text: panelText,
+          layoutKey: getPanelLayoutKeyFromChild(children),
+          width: rect.width,
+          height: rect.height,
+        });
     setPanelTitle(childTitle ?? getPanelTitle(panelText));
 
     const initialPosition = layoutPreference?.position ?? findOpenPanelPosition(
@@ -272,7 +285,7 @@ export default function DraggablePanel({ children, style = {}, snapEnabled = tru
       panelIdRef.current,
     );
 
-    if (!initializedRef.current && layoutPreference?.collapsed) {
+    if (!initializedRef.current && (defaultCollapsed || layoutPreference?.collapsed)) {
       setCollapsed(true);
     }
     initializedRef.current = true;
@@ -283,7 +296,7 @@ export default function DraggablePanel({ children, style = {}, snapEnabled = tru
       height: layoutPreference?.collapsed ? COLLAPSED_PANEL_HEIGHT_PX : rect.height,
     });
     setPosition(initialPosition);
-  }, [children, position]);
+  }, [children, position, style.left, style.right, style.top, style.bottom, defaultCollapsed]);
 
   useEffect(() => {
     return () => {
@@ -485,6 +498,35 @@ useLayoutEffect(() => {
           >
             {panelTitle}
           </span>
+          <button
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            title="Panel information"
+            aria-label="Panel information"
+            style={{
+              position: "absolute",
+              right: "28px",
+              top: "8px",
+              flex: "0 0 auto",
+              width: "18px",
+              height: "18px",
+              zIndex: 1000,
+              border: "1px solid rgba(253,230,138,0.24)",
+              borderRadius: "4px",
+              background: PANEL_BACKGROUND,
+              color: PANEL_TEXT_COLOR,
+              cursor: "pointer",
+              fontSize: "11px",
+              fontWeight: 900,
+              lineHeight: "17px",
+              padding: 0,
+              fontFamily: PANEL_FONT_FAMILY,
+              textTransform: "none",
+              letterSpacing: 0,
+            }}
+          >
+            i
+          </button>
           <button
             onMouseDown={(event) => event.stopPropagation()}
             onClick={() => setCollapsed((old) => !old)}
